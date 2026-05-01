@@ -40,7 +40,7 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          binary_name="hello-${{ matrix.goos }}-${{ matrix.goarch }}"
+          binary_name="app-${{ matrix.goos }}-${{ matrix.goarch }}"
           go build -o "$binary_name" -ldflags="-s -w" .
           echo "BINARY_NAME=${binary_name}" >> $GITHUB_ENV
 
