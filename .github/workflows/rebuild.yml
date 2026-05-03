@@ -1,0 +1,53 @@
+name: Rebuild on new builder image
+
+on:
+  workflow_run:
+    workflows: ["Dependabot Auto-Merge"]
+    types:
+      - completed
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Check if Go version changed
+        id: check
+        run: |
+          # Aktuelle Go-Version auf Runner
+          CURRENT_GO=$(go version | grep -oP 'go\K[0-9]+\.[0-9]+')
+          # Go-Version aus letztem Tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          LAST_GO=$(echo "$LAST_TAG" | grep -oP 'go\K[0-9]+\.[0-9]+' || echo "")
+          echo "Current Go: $CURRENT_GO"
+          echo "Last tag Go: $LAST_GO"
+          if [ "$CURRENT_GO" != "$LAST_GO" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Go version changed: $LAST_GO → $CURRENT_GO"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "Go version unchanged — no rebuild needed."
+          fi
+
+      - name: Trigger rebuild
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/dispatches" \
+            -d '{"event_type":"new-builder-image"}'

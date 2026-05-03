@@ -1,18 +1,16 @@
 name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Release version (e.g. 0.1.0)'
-        required: true
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: linux
     strategy:
       matrix:
         goos: [linux]
@@ -24,32 +22,54 @@ jobs:
 
       - name: Set up Go
         uses: actions/setup-go@v6
-        with:
-          go-version-file: 'go.mod'
 
-      - name: Create and push tag
-        if: matrix.goarch == 'amd64'
+        with:
+          fetch-depth: 0
+
+      - name: Parse version from tag
+        id: parse
         run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git tag "v${{ github.event.inputs.version }}"
-          git push origin "v${{ github.event.inputs.version }}"
+          TAG="${{ github.ref_name }}"           # z.B. v1.2.0-go1.24-20260430
+          VERSION="${TAG#v}"                      # 1.2.0-go1.24-20260430
+          SEMVER=$(echo "$VERSION" | cut -d'-' -f1)   # 1.2.0
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "semver=$SEMVER" >> $GITHUB_OUTPUT
+
+      - name: Install Go 1.24
+        run: sudo zypper install -y go1.24
 
       - name: Go Build
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          binary_name="app-${{ matrix.goos }}-${{ matrix.goarch }}"
-          go build -o "$binary_name" -ldflags="-s -w" .
+          binary_name="ci-s3-http-server-${{ matrix.goos }}-${{ matrix.goarch }}"
+          go build -o "$binary_name" -ldflags="-s -X main.version=${{ steps.parse.outputs.version }}"
           echo "BINARY_NAME=${binary_name}" >> $GITHUB_ENV
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+      - name: Build Docker image
+        if: matrix.goarch == 'amd64'
+        run: |
+          REGISTRY="registry.services-mgmt.con.idst.ibaintern.de"
+          IMAGE="$REGISTRY/development-samples/ci-s3-http-server"
+          VERSION="${{ steps.parse.outputs.version }}"
+          SEMVER="${{ steps.parse.outputs.semver }}"
+
+          docker build \
+            -t "$IMAGE:$VERSION" \
+            -t "$IMAGE:$SEMVER" \
+            -t "$IMAGE:latest" \
+            .
+
+          docker push "$IMAGE:$VERSION"
+          docker push "$IMAGE:$SEMVER"
+          docker push "$IMAGE:latest"
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.event.inputs.version }}
-          name: v${{ github.event.inputs.version }}
+          tag_name: ${{ github.ref_name }}
           files: ${{ env.BINARY_NAME }}
-          generate_release_notes: true
           draft: false
           prerelease: false
+          generate_release_notes: true
