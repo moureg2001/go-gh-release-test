@@ -5,11 +5,23 @@ on:
     workflows: ["Dependabot Auto-Merge"]
     types:
       - completed
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Rebuild erzwingen ohne Go-Version-Check (für Tests)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 jobs:
   check:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     permissions:
       contents: read
       actions: write
@@ -28,6 +40,13 @@ jobs:
       - name: Check if Go version changed
         id: check
         run: |
+          # Manueller Override für Tests
+          if [ "${{ github.event.inputs.force_rebuild }}" == "true" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Force rebuild requested — skipping Go version check."
+            exit 0
+          fi
+
           # Aktuelle Go-Version auf Runner
           CURRENT_GO=$(go version | grep -oP 'go\K[0-9]+\.[0-9]+')
           # Go-Version aus letztem Tag
