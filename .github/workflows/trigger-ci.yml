@@ -16,6 +16,10 @@ on:
   repository_dispatch:
     types: [new-builder-image]
 
+permissions:
+  contents: read
+  packages: write
+  
 jobs:
   build-and-scan:
     runs-on: ubuntu-latest
