@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Semver (e.g. 1.0.0)'
+        description: 'Semver e.g. 1.0.0'
         required: true
 
 permissions:
