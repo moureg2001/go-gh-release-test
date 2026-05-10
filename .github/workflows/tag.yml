@@ -10,11 +10,12 @@ on:
 permissions:
   contents: write
   packages: write
+
 jobs:
   tag:
     runs-on: ubuntu-latest
     outputs:
-      image_tag: ${{ steps.vars.outputs.image_tag }}
+      version: ${{ steps.vars.outputs.version }}
 
     steps:
       - name: Checkout code
@@ -22,29 +23,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: 'go.mod'
-
-      - name: Compute image tag
+      - name: Compute tag
         id: vars
         run: |
           VERSION="${{ github.event.inputs.version }}"
-          GO_VERSION=$(go version | grep -oP 'go\K[0-9]+\.[0-9]+')
-          DATE=$(date +'%Y%m%d')
-          IMAGE_TAG="${VERSION}-go${GO_VERSION}-${DATE}"
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
-          echo "Tagging: v${VERSION} / image: ${IMAGE_TAG}"
+          echo "Tagging: v${VERSION}"
 
       - name: Create and push git tag
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git tag "v${{ steps.vars.outputs.image_tag }}"
-          git push origin "v${{ steps.vars.outputs.image_tag }}"
-          echo "Tag pushed: v${{ steps.vars.outputs.image_tag }}"
+          git tag "v${{ steps.vars.outputs.version }}"
+          git push origin "v${{ steps.vars.outputs.version }}"
+          echo "Tag pushed: v${{ steps.vars.outputs.version }}"
 
   call-ci:
     needs: tag
