@@ -42,4 +42,10 @@ jobs:
           git config user.email "github-actions@github.com"
           git tag "v${{ steps.vars.outputs.image_tag }}"
           git push origin "v${{ steps.vars.outputs.image_tag }}"
-          echo "Tag pushed: v${{ steps.vars.outputs.image_tag }}"
+          echo "Tag pushed: v${{ steps.vars.outputs.image_tag }}"# am Ende von tag.yml
+  call-ci:
+    needs: tag
+    uses: ./.github/workflows/trigger-ci.yml
+    secrets: inherit
+    with:
+      ref: v${{ needs.tag.outputs.image_tag }}
