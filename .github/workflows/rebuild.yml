@@ -22,9 +22,10 @@ jobs:
     if: >
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
     permissions:
       contents: read
-      actions: write
 
     steps:
       - name: Checkout code
@@ -62,11 +63,11 @@ jobs:
             echo "Go version unchanged — no rebuild needed."
           fi
 
-      - name: Trigger rebuild
-        if: steps.check.outputs.changed == 'true'
-        run: |
-          curl -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "${{ github.api_url }}/repos/${{ github.repository }}/dispatches" \
-            -d '{"event_type":"new-builder-image"}'
+  call-ci:
+    needs: check
+    if: needs.check.outputs.changed == 'true'
+    uses: ./.github/workflows/trigger-ci.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
