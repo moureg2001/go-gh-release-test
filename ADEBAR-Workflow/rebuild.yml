@@ -1,0 +1,68 @@
+name: Rebuild on new builder image
+
+on:
+  workflow_run:
+    workflows: ["Dependabot Auto-Merge"]
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Rebuild erzwingen ohne Go-Version-Check (für Tests)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+jobs:
+  check:
+    runs-on: linux
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Go
+        run: sudo zypper install -y go1.24
+
+      - name: Check if Go version changed
+        id: check
+        run: |
+          # Manueller Override für Tests
+          if [ "${{ github.event.inputs.force_rebuild }}" == "true" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Force rebuild requested — skipping Go version check."
+            exit 0
+          fi
+
+          # Aktuelle Go-Version auf Runner
+          CURRENT_GO=$(go version | grep -oP 'go\K[0-9]+\.[0-9]+')
+          # Go-Version aus letztem Tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          LAST_GO=$(echo "$LAST_TAG" | grep -oP 'go\K[0-9]+\.[0-9]+' || echo "")
+          echo "Current Go: $CURRENT_GO"
+          echo "Last tag Go: $LAST_GO"
+          if [ "$CURRENT_GO" != "$LAST_GO" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Go version changed: $LAST_GO → $CURRENT_GO"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "Go version unchanged — no rebuild needed."
+          fi
+
+  call-ci:
+    needs: check
+    if: needs.check.outputs.changed == 'true'
+    uses: ./.github/workflows/trigger-ci.yml
+    secrets: inherit

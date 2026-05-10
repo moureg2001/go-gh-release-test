@@ -1,0 +1,44 @@
+name: Create Tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Semver e.g. 1.0.0'
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  tag:
+    runs-on: linux
+    outputs:
+      version: ${{ steps.vars.outputs.version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute tag
+        id: vars
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Tagging: v${VERSION}"
+
+      - name: Create and push git tag
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git tag "v${{ steps.vars.outputs.version }}"
+          git push origin "v${{ steps.vars.outputs.version }}"
+          echo "Tag pushed: v${{ steps.vars.outputs.version }}"
+
+  call-ci:
+    needs: tag
+    uses: ./.github/workflows/trigger-ci.yml
+    secrets: inherit
